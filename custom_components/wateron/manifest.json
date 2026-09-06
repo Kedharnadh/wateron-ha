@@ -1,8 +1,10 @@
 {
   "domain": "wateron",
   "name": "WaterOn (SmarterHomes)",
+  "version": "0.1.0",
   "codeowners": [],
   "config_flow": true,
+  "integration_type": "hub",
   "requirements": [],
   "dependencies": [],
   "iot_class": "cloud_polling",
