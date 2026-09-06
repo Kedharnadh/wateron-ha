@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "WaterOn (SmarterHomes)",
+        "description": "Enter your fm.wateron.cc login credentials (email/phone and password).",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid username or password.",
+      "cannot_connect": "Could not connect to the WaterOn API.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "WaterOn options",
+        "description": "Set how often to poll the WaterOn API.",
+        "data": {
+          "poll_interval": "Poll interval (seconds)"
+        }
+      }
+    }
+  }
+}
