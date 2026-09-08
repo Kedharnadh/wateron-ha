@@ -1,14 +1,20 @@
 # WaterOn (SmarterHomes) for Home Assistant
 
 Custom integration that brings your **SmarterHomes WaterOn** smart water meters into
-Home Assistant. Built against the API used by the [fm.wateron.cc portal](https://fm.wateron.cc)
+Home Assistant. Built against the APIs used by the [fm.wateron.cc portal](https://fm.wateron.cc)
+and the official **WaterOn Android app** (individual flat portal)
 (unofficial, reverse-engineered). Not affiliated with SmarterHomes Technologies.
 
 ## Features
 
-- **Society-wide sensors** — total consumption, highest/lowest day, billing amounts,
-  paid/unpaid apartment counts, last update.
+- **Two account types**, chosen when adding the integration:
+  - **Committee** (`fm.wateron.cc` / `api.wateron.cc`) — society-wide data.
+  - **Resident** (WaterOn app / `appapi.wateron.in`) — your own flat's data, signed
+    in with an OTP sent to your registered mobile number.
+- **Society-wide sensors** (committee) — total consumption, highest/lowest day,
+  billing amounts, paid/unpaid apartment counts, last update.
 - **Per-apartment water consumption** sensors (litres) for every metered flat.
+- **Resident bill sensors** — current bill amount, bill date and paid status per flat.
 - **Smart valve switches** — open/close your water meter valves from HA.
 - **Leakage / burst alert binary sensors** with location, start time and flow quantity.
 - Everything surfaced per-apartment via the device registry (device per flat).
@@ -22,7 +28,10 @@ Home Assistant. Built against the API used by the [fm.wateron.cc portal](https:/
 4. Add `https://github.com/your-github-user/wateron-ha` with category **Integration**.
 5. Click through the added repository → **Download** → restart Home Assistant.
 6. Settings → **Devices & Services** → **Add integration** → search **WaterOn**.
-7. Enter the username/password you use to log in at `fm.wateron.cc`.
+7. Choose your account type:
+   - **Committee** — the username/password you use to log in at `fm.wateron.cc`.
+   - **Resident** — your country code (ISD) and mobile number. An OTP is sent to it;
+     enter the OTP to finish setup.
 
 > **Before first install**, replace `YOUR_GITHUB` in
 > `custom_components/wateron/manifest.json` with your real repository URL. Versioning is
@@ -41,18 +50,24 @@ Home Assistant. Built against the API used by the [fm.wateron.cc portal](https:/
 
 | Setting | Default | Description |
 | --- | --- | --- |
+| Account type | — | `committee` or `resident` (chosen during setup). |
 | Poll interval | 300 s | How often to refresh data. Minimum 60 s. |
 
-Change it later via the integration's **Options**.
+Change the poll interval later via the integration's **Options**.
 
 ## Troubleshooting
 
-- **`invalid_auth`** — the credentials must be the ones used on the fm.wateron.cc portal
-  (often a mobile number).
+- **`invalid_auth`** — for committee accounts the credentials must be the ones used on
+  the fm.wateron.cc portal (often a mobile number). For resident accounts, an OTP is
+  only sent for a mobile number registered with WaterOn.
+- **`invalid_otp`** — double-check the SMS code and try again; a new OTP is re-sent if
+  you go back to the mobile-number step.
+- **Resident tokens expire** — the integration refreshes the auth token automatically
+  using the same `/v2.0/auth/` endpoint the app uses, and persists it to the config entry.
 - **No valves/apartments appear** — the portal ships several variants of these endpoints
   (wired vs wireless, `valve` vs `valvestate`). If entities are missing, check the Home
-  Assistant logs for the "Unexpected WaterOn login error" / data errors and share one
-  captured API response in an issue so the parsing can be adjusted.
+  Assistant logs and share one captured API response in an issue so the parsing can be
+  adjusted.
 - Field names in responses vary between deployments; parsing is defensive and tolerates
   the common variants (`totalQty`, `consumption`, `flatNo`, `apartmentId`, …).
 

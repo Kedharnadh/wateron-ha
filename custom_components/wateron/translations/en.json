@@ -3,19 +3,50 @@
     "step": {
       "user": {
         "title": "WaterOn (SmarterHomes)",
+        "description": "Choose whether you are an apartment society committee member or an individual flat resident.",
+        "data": {
+          "account_type": "Account type"
+        },
+        "data_description": {
+          "account_type": {
+            "committee": "Society committee member (fm.wateron.cc)",
+            "resident": "Individual flat resident (WaterOn app)"
+          }
+        }
+      },
+      "committee": {
+        "title": "Committee login",
         "description": "Enter your fm.wateron.cc login credentials (email/phone and password).",
         "data": {
           "username": "Username",
           "password": "Password"
         }
+      },
+      "resident": {
+        "title": "Resident login",
+        "description": "Enter the mobile number registered for your WaterOn flat. An OTP will be sent to it.",
+        "data": {
+          "isd": "Country code (ISD)",
+          "mobile": "Mobile number"
+        }
+      },
+      "otp": {
+        "title": "Verify OTP",
+        "description": "Enter the one-time password sent to {mobile}.",
+        "data": {
+          "otp": "OTP"
+        }
       }
     },
     "error": {
       "invalid_auth": "Invalid username or password.",
+      "invalid_otp": "Invalid OTP. Please try again.",
       "cannot_connect": "Could not connect to the WaterOn API.",
       "unknown": "Unexpected error."
     },
-    "abort": {}
+    "abort": {
+      "already_configured": "This mobile number is already configured as an individual resident."
+    }
   },
   "options": {
     "step": {
@@ -26,6 +57,22 @@
           "poll_interval": "Poll interval (seconds)"
         }
       }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "total_consumption": { "name": "Total consumption" },
+      "highest_consumption": { "name": "Highest single-day consumption" },
+      "lowest_consumption": { "name": "Lowest single-day consumption" },
+      "total_billed": { "name": "Total billed amount" },
+      "total_collected": { "name": "Total collected amount" },
+      "total_paid": { "name": "Apartments paid" },
+      "total_unpaid": { "name": "Apartments unpaid" },
+      "last_update": { "name": "Last update" },
+      "apartment_consumption": { "name": "Water consumption" },
+      "bill_amount": { "name": "Bill amount" },
+      "bill_date": { "name": "Bill date" },
+      "bill_paid": { "name": "Bill paid" }
     }
   }
 }

@@ -10,7 +10,18 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import WaterOnAPI, WaterOnAuthError, WaterOnConnectionError
+from .api_resident import (
+    WaterOnResidentAPI,
+    WaterOnResidentAuthError,
+    WaterOnResidentConnectionError,
+)
 from .const import (
+    ACCOUNT_COMMITTEE,
+    ACCOUNT_RESIDENT,
+    CONF_ACCOUNT_TYPE,
+    CONF_ISD,
+    CONF_MOBILE,
+    CONF_OTP,
     CONF_PASSWORD,
     CONF_POLL_INTERVAL,
     CONF_USERNAME,
@@ -20,10 +31,31 @@ from .const import (
     MIN_POLL_INTERVAL,
 )
 
-DATA_SCHEMA = vol.Schema(
+ACCOUNT_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_ACCOUNT_TYPE): vol.In(
+            [ACCOUNT_COMMITTEE, ACCOUNT_RESIDENT]
+        ),
+    }
+)
+
+COMMITTEE_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
+    }
+)
+
+RESIDENT_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_ISD, default="91"): str,
+        vol.Required(CONF_MOBILE): str,
+    }
+)
+
+OTP_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_OTP): str,
     }
 )
 
@@ -36,6 +68,21 @@ class WaterOnConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> dict[str, Any]:
+        """Ask which account type (committee or resident) to configure."""
+        if user_input is not None:
+            if user_input[CONF_ACCOUNT_TYPE] == ACCOUNT_COMMITTEE:
+                return await self.async_step_committee()
+            return await self.async_step_resident()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=ACCOUNT_SCHEMA,
+        )
+
+    async def async_step_committee(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Configure a society committee account (fm.wateron.cc)."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -54,13 +101,103 @@ class WaterOnConfigFlow(ConfigFlow, domain=DOMAIN):
                 LOGGER.exception("Unexpected WaterOn login error")
                 errors["base"] = "unknown"
             else:
+                data = {CONF_ACCOUNT_TYPE: ACCOUNT_COMMITTEE, **user_input}
                 title = f"WaterOn ({api.society_id})"
-                return self.async_create_entry(title=title, data=user_input)
+                return self.async_create_entry(title=title, data=data)
 
         return self.async_show_form(
-            step_id="user",
-            data_schema=DATA_SCHEMA,
+            step_id="committee",
+            data_schema=COMMITTEE_DATA_SCHEMA,
             errors=errors,
+        )
+
+    async def async_step_resident(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Collect the resident mobile number and request an OTP."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            isd = user_input[CONF_ISD].strip().lstrip("+")
+            mobile = user_input[CONF_MOBILE].strip()
+
+            for entry in self._async_current_entries():
+                if (
+                    entry.data.get(CONF_ACCOUNT_TYPE) == ACCOUNT_RESIDENT
+                    and entry.data.get(CONF_MOBILE) == mobile
+                    and str(entry.data.get(CONF_ISD, "")).lstrip("+") == isd
+                ):
+                    return self.async_abort(reason="already_configured")
+
+            self._api = WaterOnResidentAPI(
+                session=async_get_clientsession(self.hass),
+                mobile=mobile,
+                isd=isd,
+            )
+            try:
+                await self._api.async_send_otp()
+            except WaterOnResidentAuthError:
+                errors["base"] = "invalid_auth"
+            except WaterOnResidentConnectionError:
+                errors["base"] = "cannot_connect"
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Unexpected WaterOn OTP request error")
+                errors["base"] = "unknown"
+            else:
+                return await self.async_step_otp()
+
+        return self.async_show_form(
+            step_id="resident",
+            data_schema=RESIDENT_DATA_SCHEMA,
+            errors=errors,
+        )
+
+    async def async_step_otp(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Verify the OTP and create the config entry."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                token = await self._api.async_verify_otp(user_input[CONF_OTP])
+                profile = await self._api.async_profile()
+            except WaterOnResidentAuthError:
+                errors["base"] = "invalid_otp"
+            except WaterOnResidentConnectionError:
+                errors["base"] = "cannot_connect"
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Unexpected WaterOn OTP verification error")
+                errors["base"] = "unknown"
+            else:
+                society = ""
+                payload = profile.get("payload") if isinstance(profile, dict) else None
+                apt_list = (
+                    payload.get("apartment") if isinstance(payload, dict) else None
+                )
+                if isinstance(apt_list, list) and apt_list:
+                    first = apt_list[0]
+                    if isinstance(first, dict):
+                        society = first.get("society", "")
+
+                data = {
+                    CONF_ACCOUNT_TYPE: ACCOUNT_RESIDENT,
+                    CONF_ISD: self._api.isd,
+                    CONF_MOBILE: self._api.mobile,
+                    CONF_TOKEN: token,
+                }
+                title = f"WaterOn ({self._api.mobile})" + (
+                    f" - {society}" if society else ""
+                )
+                return self.async_create_entry(title=title, data=data)
+
+        return self.async_show_form(
+            step_id="otp",
+            data_schema=OTP_SCHEMA,
+            errors=errors,
+            description_placeholders={
+                CONF_MOBILE: f"({self._api.isd}) {self._api.mobile}"
+            },
         )
 
     @staticmethod

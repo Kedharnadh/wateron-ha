@@ -3,3 +3,6 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+
+# Local reverse-engineering / analysis workspace
+apk_analysis/

@@ -15,6 +15,18 @@ PLATFORMS: list[Platform] = [
 ]
 
 API_BASE = "https://api.wateron.cc"
+API_BASE_V2 = "https://appapi.wateron.in/v2.0"
+API_BASE_MAIN = "https://mainappapi.wateron.in/api/v1.0"
+API_BASE_MAIN_V1 = "https://mainappapi.wateron.in/api/v1.1"
+
+CONF_ACCOUNT_TYPE = "account_type"
+CONF_MOBILE = "mobile"
+CONF_ISD = "isd"
+CONF_OTP = "otp"
+CONF_TOKEN = "token"
+
+ACCOUNT_COMMITTEE = "committee"
+ACCOUNT_RESIDENT = "resident"
 
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"

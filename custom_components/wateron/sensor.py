@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Callable
 
 from homeassistant.components.sensor import (
@@ -18,7 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import ACCOUNT_RESIDENT, DOMAIN
 from .coordinator import WaterOnDataUpdateCoordinator
 
 
@@ -105,6 +105,79 @@ APARTMENT_SENSOR = SensorEntityDescription(
 )
 
 
+@dataclass(frozen=True)
+class WaterOnResidentSensorDescription(SensorEntityDescription):
+    """Describe a resident bill sensor keyed per apartment."""
+
+    value_fn: Callable[[dict[str, Any], dict[str, Any]], Any] | None = None
+
+
+PAID_VALUES_TRUE = {"yes", "y", "true", "1", "paid"}
+PAID_VALUES_FALSE = {"no", "n", "false", "0", "pending"}
+
+
+def _bill_amount(bill: dict[str, Any]) -> float | None:
+    amount = bill.get("amount")
+    if amount is None or amount == "":
+        return None
+    try:
+        return float(amount)
+    except (TypeError, ValueError):
+        return None
+
+
+def _bill_paid(bill: dict[str, Any]) -> str | None:
+    paid = str(bill.get("paid") or "").strip().lower()
+    if not paid:
+        return None
+    if paid in PAID_VALUES_TRUE:
+        return "Paid"
+    if paid in PAID_VALUES_FALSE:
+        return "Pending"
+    return str(bill.get("paid"))
+
+
+def _bill_date(bill: dict[str, Any], _: dict[str, Any]) -> date | None:
+    raw = bill.get("date")
+    if not raw:
+        return None
+    if isinstance(raw, date):
+        return raw
+    text = str(raw).strip()[:10]
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+RESIDENT_BILL_SENSORS: tuple[WaterOnResidentSensorDescription, ...] = (
+    WaterOnResidentSensorDescription(
+        key="amount",
+        name="Bill amount",
+        translation_key="bill_amount",
+        icon="mdi:currency-inr",
+        value_fn=_bill_amount,
+    ),
+    WaterOnResidentSensorDescription(
+        key="date",
+        name="Bill date",
+        translation_key="bill_date",
+        device_class=SensorDeviceClass.DATE,
+        icon="mdi:calendar",
+        value_fn=_bill_date,
+    ),
+    WaterOnResidentSensorDescription(
+        key="paid",
+        name="Bill paid",
+        translation_key="bill_paid",
+        icon="mdi:check-circle",
+        value_fn=lambda bill, _: _bill_paid(bill),
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -113,13 +186,21 @@ async def async_setup_entry(
     """Set up WaterOn sensors from a config entry."""
     coordinator: WaterOnDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities: list[SensorEntity] = [
-        WaterOnSocietySensor(coordinator, entry, description)
-        for description in SOCIETY_SENSORS
-    ]
+    entities: list[SensorEntity] = []
+
+    if coordinator.data.get("account_type") != ACCOUNT_RESIDENT:
+        entities.extend(
+            WaterOnSocietySensor(coordinator, entry, description)
+            for description in SOCIETY_SENSORS
+        )
 
     for apartment in coordinator.data.get("apartments", []):
         entities.append(WaterOnApartmentSensor(coordinator, entry, apartment))
+        if coordinator.data.get("account_type") == ACCOUNT_RESIDENT:
+            entities.extend(
+                WaterOnResidentBillSensor(coordinator, entry, apartment, description)
+                for description in RESIDENT_BILL_SENSORS
+            )
 
     async_add_entities(entities)
 
@@ -209,6 +290,10 @@ class WaterOnApartmentSensor(WaterOnEntity, SensorEntity):
             f"wateron_{coordinator.society_id}_apt_{self._apt_id}"
         )
         self._attr_name = f"{self._flat} water consumption"
+        unit = apartment.get("unit_abbrev") or UnitOfVolume.LITERS
+        self._attr_native_unit_of_measurement = (
+            unit if unit in (UnitOfVolume.LITERS, "KL", "kl") else UnitOfVolume.LITERS
+        )
         self._attr_device_info = {
             "identifiers": {
                 (DOMAIN, f"{coordinator.society_id}_apt_{self._apt_id}")
@@ -234,5 +319,57 @@ class WaterOnApartmentSensor(WaterOnEntity, SensorEntity):
                 f"{self.coordinator.data.get('year')}-"
                 f"{self.coordinator.data.get('month'):02d}"
             ),
+            "last_update": self.coordinator.data.get("last_update"),
+        }
+
+
+class WaterOnResidentBillSensor(WaterOnEntity, SensorEntity):
+    """Resident per-apartment bill sensor (amount, date, paid status)."""
+
+    def __init__(
+        self,
+        coordinator: WaterOnDataUpdateCoordinator,
+        entry: ConfigEntry,
+        apartment: dict[str, Any],
+        description: WaterOnResidentSensorDescription,
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self.entity_description = description
+        self._apt_id = apartment.get("id", "unknown")
+        self._flat = apartment.get("flat", self._apt_id)
+        self._attr_unique_id = (
+            f"wateron_{coordinator.society_id}_bill_"
+            f"{self._apt_id}_{description.key}"
+        )
+        self._attr_name = (
+            f"{self._flat} {description.name.lower()}"
+        )
+        self._attr_device_info = {
+            "identifiers": {
+                (DOMAIN, f"{coordinator.society_id}_apt_{self._apt_id}")
+            },
+            "name": f"WaterOn {self._flat}",
+            "manufacturer": "SmarterHomes Technologies",
+            "model": "WaterOn Smart Water Meter",
+            "via_device": (DOMAIN, coordinator.society_id),
+        }
+
+    @property
+    def native_value(self) -> Any:
+        value_fn = self.entity_description.value_fn
+        if value_fn is None:
+            return None
+        bill = self.coordinator.data.get("bills", {}).get(self._apt_id, {})
+        return value_fn(bill, self.coordinator.data)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        bill = self.coordinator.data.get("bills", {}).get(self._apt_id, {})
+        return {
+            "flat": self._flat,
+            "bill_cycle_id": bill.get("billCycleId"),
+            "online_bill": bill.get("onlineBill"),
+            "block_app": bill.get("blockApp"),
+            "client_id": bill.get("clientId"),
             "last_update": self.coordinator.data.get("last_update"),
         }
