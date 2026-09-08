@@ -25,6 +25,7 @@ AUTH_PATH = "/auth"
 DASHBOARD_PATH = "/dashboard/confinedwithinvoice/apt/{apt_id}"
 DAILY_PATH = "/getreading/daily"
 ALERTS_ACTIVE_PATH = "/alerts/active/{apt_id}"
+ALERTS_HISTORY_PATH = "/alerts/history"
 VALVE_STATUS_PATH = "/meter/{meter_id}/valve/status"
 VALVE_ACTION_PATH = "/meter/{meter_id}/valve/action/{action}"
 
@@ -184,6 +185,24 @@ class WaterOnResidentAPI:
         """Return active alerts for an apartment."""
         url = f"{API_BASE_V2}{ALERTS_ACTIVE_PATH.format(apt_id=apt_id)}"
         return await self._async_get(url)
+
+    async def async_alert_history(
+        self, apt_id: int | str, limit: int = 300
+    ) -> dict[str, Any] | None:
+        """Return the alert history (leakage/burst list) for an apartment."""
+        url = f"{API_BASE_MAIN}{ALERTS_HISTORY_PATH}"
+        return await self._async_post_form(
+            url,
+            {
+                "token": self._token or "",
+                "mobile": self._mobile,
+                "isd": self._isd,
+                "aptId": str(apt_id),
+                "start": "0",
+                "limit": str(limit),
+                "fcmToken": _FCM_TOKEN_PLACEHOLDER,
+            },
+        )
 
     async def _async_get(
         self, url: str, bearer: str | None = None

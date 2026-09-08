@@ -413,6 +413,41 @@ def parse_resident_alert(
     }
 
 
+def parse_resident_alert_history(
+    item: Any, apt_id: int | str, apt_no: str
+) -> dict[str, Any] | None:
+    """Normalise one /alerts/history entry into the shared alert record shape.
+
+    'altCode' maps to the app's alert types: 'Quantity' is a high-flow (burst)
+    alarm and 'Duration' a prolonged-flow (leakage) alarm.
+    """
+    if not isinstance(item, dict):
+        return None
+    alt_code = str(item.get("altCode") or "")
+    alt_date = str(item.get("altDate") or "")
+    alt_time = str(item.get("altTime") or "")
+    svr = str(item.get("svrDateTime") or "")
+    if not svr and alt_date and alt_time:
+        svr = f"{alt_date} {alt_time}"
+    return {
+        "aptNo": apt_no,
+        "aptId": str(apt_id),
+        "meterId": str(item.get("meterId") or ""),
+        "alertType": "Q" if "quantity" in alt_code.lower() else "D",
+        "altCode": alt_code,
+        "location": item.get("location") or apt_no,
+        "date": alt_date,
+        "time": alt_time,
+        "quantity": item.get("FlowQuantity"),
+        "msg": item.get("msg", ""),
+        "altId": str(item.get("altId") or ""),
+        "alarmDuration": item.get("alarmDuration"),
+        "timestamp": item.get("timestamp", ""),
+        "svrDateTime": svr,
+        "raw": item,
+    }
+
+
 class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Fetch individual-flat water data from the WaterOn resident API."""
 
@@ -491,10 +526,23 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
             if dash is not None:
                 bills[apt_id] = parse_resident_dashboard(dash)
 
-            active = await self.api.async_active_alerts(apt_id)
-            if isinstance(active, list):
-                for item in active:
-                    alerts.append(parse_resident_alert(item, apt_id, apt["flat"]))
+            history = await self.api.async_alert_history(apt_id)
+            hist_list = history.get("alertList") if isinstance(history, dict) else None
+            if isinstance(hist_list, list):
+                for item in hist_list:
+                    record = parse_resident_alert_history(item, apt_id, apt["flat"])
+                    if record is not None:
+                        alerts.append(record)
+
+        latest: dict[tuple[str, str], dict[str, Any]] = {}
+        for alert in alerts:
+            key = (alert["meterId"], alert["alertType"])
+            current = latest.get(key)
+            if current is None or (alert.get("svrDateTime") or "") > (
+                current.get("svrDateTime") or ""
+            ):
+                latest[key] = alert
+        alerts = list(latest.values())
 
         valves: list[dict[str, Any]] = []
         for apt in apartments:

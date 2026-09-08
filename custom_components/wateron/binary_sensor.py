@@ -110,6 +110,15 @@ class WaterOnAlertSensor(
                 attrs["location"] = alert.get("location", "")
                 attrs["time"] = alert.get("time", "")
                 attrs["quantity"] = alert.get("quantity")
+                attrs["alert_type"] = alert.get("altCode") or (
+                    "burst" if self._is_burst else "leak"
+                )
+                attrs["message"] = alert.get("msg", "")
+                attrs["alert_id"] = alert.get("altId", "")
+                attrs["duration_min"] = alert.get("alarmDuration")
+                attrs["recorded_at"] = (
+                    alert.get("svrDateTime", "") or alert.get("timestamp", "")
+                )
                 raw_date = alert.get("date")
                 if isinstance(raw_date, (int, float)):
                     try:
