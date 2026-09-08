@@ -26,6 +26,7 @@ from .const import (
     CONF_OTP,
     CONF_PASSWORD,
     CONF_POLL_INTERVAL,
+    CONF_TOKEN,
     CONF_USERNAME,
     DEFAULT_POLL_INTERVAL,
     DOMAIN,
