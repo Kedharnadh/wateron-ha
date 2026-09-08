@@ -8,10 +8,7 @@
           "account_type": "Account type"
         },
         "data_description": {
-          "account_type": {
-            "committee": "Society committee member (fm.wateron.cc)",
-            "resident": "Individual flat resident (WaterOn app)"
-          }
+          "account_type": "Society committee members log in with their fm.wateron.cc credentials; individual flat residents use a mobile number and OTP."
         }
       },
       "committee": {

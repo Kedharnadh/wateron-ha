@@ -7,6 +7,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import WaterOnAPI, WaterOnAuthError, WaterOnConnectionError
@@ -33,8 +34,20 @@ from .const import (
 
 ACCOUNT_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_ACCOUNT_TYPE): vol.In(
-            [ACCOUNT_COMMITTEE, ACCOUNT_RESIDENT]
+        vol.Required(CONF_ACCOUNT_TYPE): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    selector.SelectOptionDict(
+                        value=ACCOUNT_COMMITTEE,
+                        label="Society committee member (fm.wateron.cc)",
+                    ),
+                    selector.SelectOptionDict(
+                        value=ACCOUNT_RESIDENT,
+                        label="Individual flat resident (WaterOn app)",
+                    ),
+                ],
+                mode=selector.SelectSelectorMode.LIST,
+            )
         ),
     }
 )
