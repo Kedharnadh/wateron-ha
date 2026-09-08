@@ -177,7 +177,7 @@ class WaterOnResidentAPI:
         try:
             resp.raise_for_status()
             return await resp.json(content_type=None)
-        except (aiohttp.ClientError, ValueError) as err:
+        except (aiohttp.ClientError, ValueError, asyncio.TimeoutError) as err:
             raise WaterOnResidentConnectionError(f"Bad response from {url}: {err}") from err
 
     async def async_active_alerts(self, apt_id: int | str) -> list[Any] | None:
@@ -199,7 +199,7 @@ class WaterOnResidentAPI:
         try:
             resp.raise_for_status()
             return await resp.json(content_type=None)
-        except (aiohttp.ClientError, ValueError) as err:
+        except (aiohttp.ClientError, ValueError, asyncio.TimeoutError) as err:
             raise WaterOnResidentConnectionError(f"Bad response from {url}: {err}") from err
 
     async def _async_post_form(
@@ -220,5 +220,5 @@ class WaterOnResidentAPI:
         try:
             resp.raise_for_status()
             return await resp.json(content_type=None)
-        except (aiohttp.ClientError, ValueError) as err:
+        except (aiohttp.ClientError, ValueError, asyncio.TimeoutError) as err:
             raise WaterOnResidentConnectionError(f"Bad response from {url}: {err}") from err

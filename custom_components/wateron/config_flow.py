@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import voluptuous as vol
@@ -175,9 +176,10 @@ class WaterOnConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 token = await self._api.async_verify_otp(user_input[CONF_OTP])
                 profile = await self._api.async_profile()
-            except WaterOnResidentAuthError:
+            except WaterOnResidentAuthError as err:
+                LOGGER.debug("WaterOn OTP verification rejected: %s", err)
                 errors["base"] = "invalid_otp"
-            except WaterOnResidentConnectionError:
+            except (WaterOnResidentConnectionError, asyncio.TimeoutError):
                 errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
                 LOGGER.exception("Unexpected WaterOn OTP verification error")
