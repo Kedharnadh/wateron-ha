@@ -14,9 +14,18 @@ and the official **WaterOn Android app** (individual flat portal)
 - **Society-wide sensors** (committee) — total consumption, highest/lowest day,
   billing amounts, paid/unpaid apartment counts, last update.
 - **Per-apartment water consumption** sensors (litres) for every metered flat.
+- **Historical consumption import** — on the first refresh the resident coordinator
+  pulls up to 3 months of daily readings (current + previous 2 months) in a single call.
+  Per-flat monthly totals are exposed as **"Consumption last month"** and
+  **"Consumption 2 months ago"** sensors, and the full day-by-day readings for the
+  current month are available as attributes on the water-consumption sensor
+  (`daily_readings`) alongside `last_month_total` / `two_months_ago_total`.
 - **Resident bill sensors** — current bill amount, bill date and paid status per flat.
 - **Smart valve switches** — open/close your water meter valves from HA.
 - **Leakage / burst alert binary sensors** with location, start time and flow quantity.
+- **Alert history** — every past leakage/burst event is kept (up to 300 per flat). A
+  diagnostic **"Alert history"** sensor counts them and exposes the full list
+  (`events`) with type, timestamp, message, quantity and duration in its attributes.
 - Everything surfaced per-apartment via the device registry (device per flat).
 - Home Assistant MQTT auto-discovery is **not** required — sensors register natively.
 

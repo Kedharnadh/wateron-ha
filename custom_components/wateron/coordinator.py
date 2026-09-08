@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -313,15 +313,15 @@ def parse_resident_profile(raw: Any) -> list[dict[str, Any]]:
     return apartments
 
 
-def parse_resident_daily(raw: Any) -> dict[int, float]:
-    """Return monthly consumption totals keyed by meter id from /getreading/daily."""
-    totals: dict[int, float] = {}
+def parse_resident_daily_records(raw: Any) -> list[dict[str, Any]]:
+    """Return the daily consumption rows from /getreading/daily."""
+    records: list[dict[str, Any]] = []
     if not isinstance(raw, dict):
-        return totals
+        return records
 
     rows = raw.get("consumption") or []
     if not isinstance(rows, list):
-        return totals
+        return records
 
     for row in rows:
         if not isinstance(row, dict):
@@ -334,8 +334,18 @@ def parse_resident_daily(raw: Any) -> dict[int, float]:
             value = float(row.get("value") or 0)
         except (TypeError, ValueError):
             value = 0.0
-        totals[meter_id] = totals.get(meter_id, 0.0) + value
-    return totals
+        day = str(row.get("flow_date") or row.get("date") or "")
+        if not day:
+            continue
+        records.append({"meterId": meter_id, "date": day, "value": value})
+    return records
+
+
+def _month_shift(reference: date, delta: int) -> date:
+    """Return the 1st of the month `delta` months before/after `reference`."""
+    total = reference.year * 12 + (reference.month - 1) + delta
+    year, month0 = divmod(total, 12)
+    return date(year, month0 + 1, 1)
 
 
 def parse_resident_dashboard(raw: Any) -> dict[str, Any]:
@@ -497,8 +507,10 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
         now = datetime.now()
         month = str(now.month)
         year = str(now.year)
+        current_month_key = f"{now.year:04d}-{now.month:02d}"
         fdate = now.replace(day=1).date().isoformat()
         tdate = now.date().isoformat()
+        history_fdate = _month_shift(now.date(), -2).isoformat()
 
         apartments = parse_resident_profile(await self.api.async_profile())
 
@@ -510,13 +522,50 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
                 meter_apt[meter["id"]] = apt["id"]
 
         consumption: dict[int, float] = {}
+        daily_points: dict[int, list[dict[str, Any]]] = {}
+        monthly_by_meter: dict[int, dict[str, float]] = {}
         if all_meter_ids:
-            daily = await self.api.async_daily(all_meter_ids, fdate, tdate)
-            consumption = parse_resident_daily(daily)
-            for apt in apartments:
-                apt["consumption"] = round(
-                    sum(consumption.get(m["id"], 0) for m in apt["meters"]), 2
+            daily = await self.api.async_daily(
+                all_meter_ids, history_fdate, tdate
+            )
+            for row in parse_resident_daily_records(daily):
+                meter_id = row["meterId"]
+                day = row["date"]
+                bucket = day[:7]
+                if bucket == current_month_key:
+                    consumption[meter_id] = (
+                        consumption.get(meter_id, 0.0) + row["value"]
+                    )
+                daily_points.setdefault(meter_id, []).append(row)
+                meter_monthly = monthly_by_meter.setdefault(meter_id, {})
+                meter_monthly[bucket] = (
+                    meter_monthly.get(bucket, 0.0) + row["value"]
                 )
+
+            for apt in apartments:
+                apt_daily: list[dict[str, Any]] = []
+                apt_monthly: dict[str, float] = {}
+                for meter in apt["meters"]:
+                    apt_daily.extend(daily_points.get(meter["id"], []))
+                    for bucket, value in monthly_by_meter.get(
+                        meter["id"], {}
+                    ).items():
+                        apt_monthly[bucket] = (
+                            apt_monthly.get(bucket, 0.0) + value
+                        )
+                apt["consumption"] = round(
+                    sum(
+                        consumption.get(m["id"], 0) for m in apt["meters"]
+                    ),
+                    2,
+                )
+                apt["daily_readings"] = sorted(
+                    apt_daily, key=lambda row: row["date"]
+                )
+                apt["monthly"] = {
+                    bucket: round(value, 2)
+                    for bucket, value in sorted(apt_monthly.items())
+                }
 
         bills: dict[str, dict[str, Any]] = {}
         alerts: list[dict[str, Any]] = []
@@ -534,8 +583,13 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
                     if record is not None:
                         alerts.append(record)
 
+        alert_history = sorted(
+            alerts,
+            key=lambda alert: alert.get("svrDateTime") or "",
+            reverse=True,
+        )
         latest: dict[tuple[str, str], dict[str, Any]] = {}
-        for alert in alerts:
+        for alert in alert_history:
             key = (alert["meterId"], alert["alertType"])
             current = latest.get(key)
             if current is None or (alert.get("svrDateTime") or "") > (
@@ -564,6 +618,7 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
             "summary": {},
             "valves": valves,
             "alerts": alerts,
+            "alert_history": alert_history,
             "bills": bills,
             "daily": consumption,
             "month": int(month),

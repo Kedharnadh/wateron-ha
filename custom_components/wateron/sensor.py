@@ -15,6 +15,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfVolume
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -178,6 +179,51 @@ RESIDENT_BILL_SENSORS: tuple[WaterOnResidentSensorDescription, ...] = (
 )
 
 
+def _month_key_for_offset(offset: int) -> str:
+    """Return the 'YYYY-MM' key `offset` months before the current month."""
+    now = datetime.now()
+    total = now.year * 12 + (now.month - 1) - offset
+    year, month0 = divmod(total, 12)
+    return f"{year:04d}-{month0 + 1:02d}"
+
+
+RESIDENT_MONTHLY_SENSORS: tuple[tuple[int, SensorEntityDescription], ...] = (
+    (
+        1,
+        SensorEntityDescription(
+            key="consumption_last_month",
+            name="Consumption last month",
+            translation_key="consumption_last_month",
+            device_class=SensorDeviceClass.WATER,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            native_unit_of_measurement=UnitOfVolume.LITERS,
+            icon="mdi:water",
+        ),
+    ),
+    (
+        2,
+        SensorEntityDescription(
+            key="consumption_two_months",
+            name="Consumption 2 months ago",
+            translation_key="consumption_two_months",
+            device_class=SensorDeviceClass.WATER,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            native_unit_of_measurement=UnitOfVolume.LITERS,
+            icon="mdi:water",
+        ),
+    ),
+)
+
+
+RESIDENT_ALERT_HISTORY_SENSOR = SensorEntityDescription(
+    key="alert_history",
+    name="Alert history",
+    translation_key="alert_history",
+    icon="mdi:history",
+    entity_category=EntityCategory.DIAGNOSTIC,
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -200,6 +246,15 @@ async def async_setup_entry(
             entities.extend(
                 WaterOnResidentBillSensor(coordinator, entry, apartment, description)
                 for description in RESIDENT_BILL_SENSORS
+            )
+            entities.extend(
+                WaterOnResidentMonthlySensor(
+                    coordinator, entry, apartment, offset, description
+                )
+                for offset, description in RESIDENT_MONTHLY_SENSORS
+            )
+            entities.append(
+                WaterOnResidentAlertHistorySensor(coordinator, entry, apartment)
             )
 
     async_add_entities(entities)
@@ -313,7 +368,16 @@ class WaterOnApartmentSensor(WaterOnEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {
+        apartment = next(
+            (
+                apt
+                for apt in self.coordinator.data.get("apartments", [])
+                if apt.get("id") == self._apt_id
+            ),
+            None,
+        )
+        monthly = apartment.get("monthly", {}) if apartment else {}
+        attrs: dict[str, Any] = {
             "flat": self._flat,
             "month": (
                 f"{self.coordinator.data.get('year')}-"
@@ -321,6 +385,15 @@ class WaterOnApartmentSensor(WaterOnEntity, SensorEntity):
             ),
             "last_update": self.coordinator.data.get("last_update"),
         }
+        last_month_key = _month_key_for_offset(1)
+        two_months_key = _month_key_for_offset(2)
+        if last_month_key in monthly:
+            attrs["last_month_total"] = monthly[last_month_key]
+        if two_months_key in monthly:
+            attrs["two_months_ago_total"] = monthly[two_months_key]
+        if apartment and apartment.get("daily_readings"):
+            attrs["daily_readings"] = apartment["daily_readings"]
+        return attrs
 
 
 class WaterOnResidentBillSensor(WaterOnEntity, SensorEntity):
@@ -371,5 +444,117 @@ class WaterOnResidentBillSensor(WaterOnEntity, SensorEntity):
             "online_bill": bill.get("onlineBill"),
             "block_app": bill.get("blockApp"),
             "client_id": bill.get("clientId"),
+            "last_update": self.coordinator.data.get("last_update"),
+        }
+
+
+class WaterOnResidentMonthlySensor(WaterOnEntity, SensorEntity):
+    """Resident per-apartment consumption total for a previous month."""
+
+    def __init__(
+        self,
+        coordinator: WaterOnDataUpdateCoordinator,
+        entry: ConfigEntry,
+        apartment: dict[str, Any],
+        month_offset: int,
+        description: SensorEntityDescription,
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self.entity_description = description
+        self._apt_id = apartment.get("id", "unknown")
+        self._flat = apartment.get("flat", self._apt_id)
+        self._month_offset = month_offset
+        self._attr_unique_id = (
+            f"wateron_{coordinator.society_id}_cons_"
+            f"{self._apt_id}_{description.key}"
+        )
+        self._attr_name = f"{self._flat} {description.name.lower()}"
+        self._attr_device_info = {
+            "identifiers": {
+                (DOMAIN, f"{coordinator.society_id}_apt_{self._apt_id}")
+            },
+            "name": f"WaterOn {self._flat}",
+            "manufacturer": "SmarterHomes Technologies",
+            "model": "WaterOn Smart Water Meter",
+            "via_device": (DOMAIN, coordinator.society_id),
+        }
+
+    @property
+    def month_key(self) -> str:
+        return _month_key_for_offset(self._month_offset)
+
+    @property
+    def native_value(self) -> float | None:
+        for apartment in self.coordinator.data.get("apartments", []):
+            if apartment.get("id") == self._apt_id:
+                return apartment.get("monthly", {}).get(self.month_key)
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "flat": self._flat,
+            "month": self.month_key,
+            "last_update": self.coordinator.data.get("last_update"),
+        }
+
+
+class WaterOnResidentAlertHistorySensor(WaterOnEntity, SensorEntity):
+    """Number of past burst/leakage alerts with the full event history."""
+
+    def __init__(
+        self,
+        coordinator: WaterOnDataUpdateCoordinator,
+        entry: ConfigEntry,
+        apartment: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self.entity_description = RESIDENT_ALERT_HISTORY_SENSOR
+        self._apt_id = apartment.get("id", "unknown")
+        self._flat = apartment.get("flat", self._apt_id)
+        self._attr_unique_id = (
+            f"wateron_{coordinator.society_id}_alert_history_{self._apt_id}"
+        )
+        self._attr_name = f"{self._flat} {self.entity_description.name.lower()}"
+        self._attr_device_info = {
+            "identifiers": {
+                (DOMAIN, f"{coordinator.society_id}_apt_{self._apt_id}")
+            },
+            "name": f"WaterOn {self._flat}",
+            "manufacturer": "SmarterHomes Technologies",
+            "model": "WaterOn Smart Water Meter",
+            "via_device": (DOMAIN, coordinator.society_id),
+        }
+
+    @property
+    def _events(self) -> list[dict[str, Any]]:
+        apt_id = str(self._apt_id)
+        return [
+            event
+            for event in self.coordinator.data.get("alert_history", [])
+            if str(event.get("aptId")) == apt_id
+        ]
+
+    @property
+    def native_value(self) -> int:
+        return len(self._events)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        events = [
+            {
+                "alert_type": event.get("alertType"),
+                "date": event.get("svrDateTime") or event.get("date"),
+                "message": event.get("msg"),
+                "quantity": event.get("quantity"),
+                "duration_minutes": event.get("alarmDuration"),
+                "location": event.get("location"),
+                "alert_id": event.get("altId"),
+            }
+            for event in self._events
+        ]
+        return {
+            "flat": self._flat,
+            "events": events,
             "last_update": self.coordinator.data.get("last_update"),
         }

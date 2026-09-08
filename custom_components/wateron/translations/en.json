@@ -69,7 +69,10 @@
       "apartment_consumption": { "name": "Water consumption" },
       "bill_amount": { "name": "Bill amount" },
       "bill_date": { "name": "Bill date" },
-      "bill_paid": { "name": "Bill paid" }
+      "bill_paid": { "name": "Bill paid" },
+      "consumption_last_month": { "name": "Consumption last month" },
+      "consumption_two_months": { "name": "Consumption 2 months ago" },
+      "alert_history": { "name": "Alert history" }
     }
   }
 }
