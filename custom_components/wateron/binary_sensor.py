@@ -71,7 +71,11 @@ class WaterOnAlertSensor(
         self._attr_icon = "mdi:pipe-burst" if is_burst else "mdi:pipe-leak"
         self._attr_device_info = {
             "identifiers": {
-                (DOMAIN, f"{coordinator.society_id}_apt_{self._apt_no}")
+                (
+                    DOMAIN,
+                    f"{coordinator.society_id}_apt_"
+                    f"{alert.get('aptId') or self._apt_no}",
+                )
             },
             "name": f"WaterOn {self._apt_no}",
             "manufacturer": "SmarterHomes Technologies",

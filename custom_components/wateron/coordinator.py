@@ -357,13 +357,15 @@ def parse_resident_dashboard(raw: Any) -> dict[str, Any]:
 
 
 def parse_resident_valve(
-    raw: Any, meter_id: int | str, apt_no: str
+    raw: Any, meter_id: int | str, apt_no: str, apt_id: int | str
 ) -> dict[str, Any]:
     """Normalise a single-meter valve status response."""
+    apt_id = str(apt_id)
     if not isinstance(raw, dict):
         return {
             "meterId": str(meter_id),
             "aptNo": apt_no,
+            "aptId": apt_id,
             "valveStatus": "",
             "status": None,
             "actionReason": "",
@@ -374,6 +376,7 @@ def parse_resident_valve(
     return {
         "meterId": str(meter_id),
         "aptNo": apt_no,
+        "aptId": apt_id,
         "valveStatus": str(valve_status or "").lower(),
         "status": status,
         "action": action,
@@ -399,6 +402,7 @@ def parse_resident_alert(
         time_str = time[11:16] if len(time) > 11 else time
     return {
         "aptNo": apt_no,
+        "aptId": str(apt_id),
         "meterId": meter_id,
         "alertType": "",
         "location": apt_no,
@@ -500,7 +504,9 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
                 status_raw = await self.api.async_valve_status(meter["id"])
                 if status_raw is not None:
                     valves.append(
-                        parse_resident_valve(status_raw, meter["id"], apt["flat"])
+                        parse_resident_valve(
+                            status_raw, meter["id"], apt["flat"], apt["id"]
+                        )
                     )
 
         return {

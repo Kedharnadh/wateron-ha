@@ -78,7 +78,11 @@ class WaterOnValveSwitch(CoordinatorEntity[WaterOnDataUpdateCoordinator], Switch
         self._attr_icon = "mdi:water-valve"
         self._attr_device_info = {
             "identifiers": {
-                (DOMAIN, f"{coordinator.society_id}_apt_{self._apt_no}")
+                (
+                    DOMAIN,
+                    f"{coordinator.society_id}_apt_"
+                    f"{valve.get('aptId') or self._apt_no}",
+                )
             },
             "name": f"WaterOn {self._apt_no}",
             "manufacturer": "SmarterHomes Technologies",
