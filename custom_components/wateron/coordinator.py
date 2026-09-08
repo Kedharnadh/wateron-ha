@@ -431,15 +431,16 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            return await self._async_fetch()
-        except WaterOnResidentAuthError:
-            LOGGER.info("Token expired, refreshing token")
-            await self._async_refresh()
-            return await self._async_fetch()
+            try:
+                return await self._async_fetch()
+            except WaterOnResidentAuthError:
+                LOGGER.info("Token expired, refreshing token")
+                await self._async_refresh_token()
+                return await self._async_fetch()
         except WaterOnResidentConnectionError as err:
             raise UpdateFailed(str(err)) from err
 
-    async def _async_refresh(self) -> None:
+    async def _async_refresh_token(self) -> None:
         try:
             if not await self.api.async_refresh_token():
                 raise WaterOnResidentAuthError("Could not refresh token")
@@ -522,7 +523,7 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
             await self.api.async_valve_action(meter_id, action)
         except WaterOnResidentAuthError:
             LOGGER.info("Token expired while toggling valve, refreshing")
-            await self._async_refresh()
+            await self._async_refresh_token()
             await self.api.async_valve_action(meter_id, action)
         except WaterOnResidentConnectionError:
             LOGGER.exception("Valve action failed")
