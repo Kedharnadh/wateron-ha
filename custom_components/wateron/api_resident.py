@@ -30,6 +30,10 @@ VALVE_ACTION_PATH = "/meter/{meter_id}/valve/action/{action}"
 
 TIMEOUT = aiohttp.ClientTimeout(total=30)
 
+# The getreading/daily endpoint rejects an empty FCM token. Home Assistant has
+# no Firebase registration, so a static placeholder is sent instead.
+_FCM_TOKEN_PLACEHOLDER = "homeassistant-wateron"
+
 
 class WaterOnResidentAuthError(Exception):
     """Raised when an OTP/token is rejected (HTTP 401)."""
@@ -150,7 +154,7 @@ class WaterOnResidentAPI:
                 "fdate": fdate,
                 "mobile": self._mobile,
                 "isd": self._isd,
-                "fcmToken": "",
+                "fcmToken": _FCM_TOKEN_PLACEHOLDER,
             },
         )
 
