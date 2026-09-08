@@ -173,18 +173,12 @@ class WaterOnConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            if self._api is None:
+                return await self.async_step_resident()
             try:
                 token = await self._api.async_verify_otp(user_input[CONF_OTP])
                 profile = await self._api.async_profile()
-            except WaterOnResidentAuthError as err:
-                LOGGER.debug("WaterOn OTP verification rejected: %s", err)
-                errors["base"] = "invalid_otp"
-            except (WaterOnResidentConnectionError, asyncio.TimeoutError):
-                errors["base"] = "cannot_connect"
-            except Exception:  # noqa: BLE001
-                LOGGER.exception("Unexpected WaterOn OTP verification error")
-                errors["base"] = "unknown"
-            else:
+
                 society = ""
                 payload = profile.get("payload") if isinstance(profile, dict) else None
                 apt_list = (
@@ -205,6 +199,14 @@ class WaterOnConfigFlow(ConfigFlow, domain=DOMAIN):
                     f" - {society}" if society else ""
                 )
                 return self.async_create_entry(title=title, data=data)
+            except WaterOnResidentAuthError as err:
+                LOGGER.debug("WaterOn OTP verification rejected: %s", err)
+                errors["base"] = "invalid_otp"
+            except (WaterOnResidentConnectionError, asyncio.TimeoutError):
+                errors["base"] = "cannot_connect"
+            except Exception:  # noqa: BLE001
+                LOGGER.exception("Unexpected WaterOn OTP verification error")
+                errors["base"] = "unknown"
 
         return self.async_show_form(
             step_id="otp",
