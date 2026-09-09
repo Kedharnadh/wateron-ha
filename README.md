@@ -34,17 +34,13 @@ and the official **WaterOn Android app** (individual flat portal)
 1. Install [HACS](https://hacs.xyz/) if you haven't already.
 2. Push this folder to a GitHub repository (e.g. `wateron-ha`).
 3. HACS → *Integrations* → ⋮ menu → *Custom repositories*.
-4. Add `https://github.com/your-github-user/wateron-ha` with category **Integration**.
+4. Add `https://github.com/kedharnadh/wateron-ha` with category **Integration**.
 5. Click through the added repository → **Download** → restart Home Assistant.
 6. Settings → **Devices & Services** → **Add integration** → search **WaterOn**.
 7. Choose your account type:
    - **Committee** — the username/password you use to log in at `fm.wateron.cc`.
    - **Resident** — your country code (ISD) and mobile number. An OTP is sent to it;
      enter the OTP to finish setup.
-
-> **Before first install**, replace `YOUR_GITHUB` in
-> `custom_components/wateron/manifest.json` with your real repository URL. Versioning is
-> handled by git tags, so omit `version` from the manifest (do not add one back).
 
 ## Development / CI
 
