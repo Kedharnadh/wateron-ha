@@ -93,7 +93,7 @@ def parse_society(raw: Any) -> dict[str, Any]:
         points = []
 
     quantities = [
-        float(p.get("totalQty", 0) or 0)
+        _first_number(p, ("totalQty",))
         for p in points
         if isinstance(p, dict)
     ]
@@ -197,7 +197,7 @@ class WaterOnDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(str(err)) from err
 
     async def _async_fetch(self) -> dict[str, Any]:
-        now = datetime.now()
+        now = datetime.now(tz=timezone.utc)
         month = str(now.month)
         year = str(now.year)
 
@@ -504,7 +504,7 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
         self.hass.config_entries.async_update_entry(self.entry, data=data)
 
     async def _async_fetch(self) -> dict[str, Any]:
-        now = datetime.now()
+        now = datetime.now(tz=timezone.utc)
         month = str(now.month)
         year = str(now.year)
         current_month_key = f"{now.year:04d}-{now.month:02d}"
@@ -588,15 +588,6 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
             key=lambda alert: alert.get("svrDateTime") or "",
             reverse=True,
         )
-        latest: dict[tuple[str, str], dict[str, Any]] = {}
-        for alert in alert_history:
-            key = (alert["meterId"], alert["alertType"])
-            current = latest.get(key)
-            if current is None or (alert.get("svrDateTime") or "") > (
-                current.get("svrDateTime") or ""
-            ):
-                latest[key] = alert
-        alerts = list(latest.values())
 
         valves: list[dict[str, Any]] = []
         for apt in apartments:

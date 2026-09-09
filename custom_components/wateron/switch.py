@@ -116,8 +116,16 @@ class WaterOnValveSwitch(CoordinatorEntity[WaterOnDataUpdateCoordinator], Switch
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Open the valve."""
-        await self.coordinator.async_valve_action(int(self._meter_id), "open")
+        try:
+            meter_id = int(self._meter_id)
+        except (TypeError, ValueError):
+            return
+        await self.coordinator.async_valve_action(meter_id, "open")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Close the valve."""
-        await self.coordinator.async_valve_action(int(self._meter_id), "close")
+        try:
+            meter_id = int(self._meter_id)
+        except (TypeError, ValueError):
+            return
+        await self.coordinator.async_valve_action(meter_id, "close")

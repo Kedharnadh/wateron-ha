@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Callable
 
 from homeassistant.components.sensor import (
@@ -181,7 +181,7 @@ RESIDENT_BILL_SENSORS: tuple[WaterOnResidentSensorDescription, ...] = (
 
 def _month_key_for_offset(offset: int) -> str:
     """Return the 'YYYY-MM' key `offset` months before the current month."""
-    now = datetime.now()
+    now = datetime.now(tz=timezone.utc)
     total = now.year * 12 + (now.month - 1) - offset
     year, month0 = divmod(total, 12)
     return f"{year:04d}-{month0 + 1:02d}"

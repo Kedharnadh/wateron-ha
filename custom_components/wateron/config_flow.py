@@ -80,6 +80,8 @@ class WaterOnConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    _api: WaterOnResidentAPI | None = None
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> dict[str, Any]:

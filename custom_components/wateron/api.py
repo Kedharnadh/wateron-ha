@@ -22,6 +22,9 @@ VALVE_PATH = "/apartmentinfoservice/society/valve"
 VALVE_STATUS_PATH = "/apartmentinfoservice/society/valvestatus"
 VALVE_HISTORY_PATH = "/apartmentinfoservice/society/valvehistory"
 
+MAX_RETRIES = 3
+RETRY_BACKOFF = 1.0  # seconds, doubled each attempt
+
 
 class WaterOnAuthError(Exception):
     """Raised when authentication fails or a token is rejected (HTTP 401)."""
@@ -89,26 +92,38 @@ class WaterOnAPI:
         LOGGER.debug("Authenticated, society_id=%s", self.society_id)
 
     async def async_post(self, path: str, body: dict[str, Any]) -> dict | None:
-        """POST JSON to the API, raising WaterOnAuthError on 401."""
+        """POST JSON to the API, raising WaterOnAuthError on 401.
+
+        Retries up to MAX_RETRIES times on transient connection errors with
+        exponential backoff.
+        """
         url = f"{self._api_base}{path}"
-        try:
-            resp = await self._session.post(
-                url,
-                json=body,
-                headers=self._headers,
-                timeout=aiohttp.ClientTimeout(total=30),
-            )
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            raise WaterOnConnectionError(f"Cannot reach {url}: {err}") from err
+        last_err: Exception | None = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = await self._session.post(
+                    url,
+                    json=body,
+                    headers=self._headers,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                )
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                last_err = err
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_BACKOFF * (2 ** attempt))
+                    continue
+                raise WaterOnConnectionError(f"Cannot reach {url}: {err}") from err
 
-        if resp.status == 401:
-            raise WaterOnAuthError("Token rejected (HTTP 401)")
+            if resp.status == 401:
+                raise WaterOnAuthError("Token rejected (HTTP 401)")
 
-        try:
-            resp.raise_for_status()
-            return await resp.json(content_type=None)
-        except (aiohttp.ClientError, ValueError) as err:
-            raise WaterOnConnectionError(f"Bad response from {url}: {err}") from err
+            try:
+                resp.raise_for_status()
+                return await resp.json(content_type=None)
+            except (aiohttp.ClientError, ValueError) as err:
+                raise WaterOnConnectionError(f"Bad response from {url}: {err}") from err
+
+        raise WaterOnConnectionError(f"Cannot reach {url}: {last_err}")
 
     async def async_profile(self) -> dict | None:
         return await self.async_post(

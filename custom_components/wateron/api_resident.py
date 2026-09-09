@@ -35,6 +35,9 @@ TIMEOUT = aiohttp.ClientTimeout(total=30)
 # no Firebase registration, so a static placeholder is sent instead.
 _FCM_TOKEN_PLACEHOLDER = "homeassistant-wateron"
 
+MAX_RETRIES = 3
+RETRY_BACKOFF = 1.0  # seconds, doubled each attempt
+
 
 class WaterOnResidentAuthError(Exception):
     """Raised when an OTP/token is rejected (HTTP 401)."""
@@ -131,7 +134,7 @@ class WaterOnResidentAPI:
             url,
             {
                 "mobile": self._mobile,
-                "isdCode": self._isd,
+                "isd": self._isd,
                 "token": self._token or "",
             },
         )
@@ -207,19 +210,26 @@ class WaterOnResidentAPI:
     async def _async_get(
         self, url: str, bearer: str | None = None
     ) -> Any | None:
-        try:
-            resp = await self._session.get(
-                url, headers=self._auth_headers(bearer), timeout=TIMEOUT
-            )
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            raise WaterOnResidentConnectionError(f"Cannot reach {url}: {err}") from err
-        if resp.status == 401:
-            raise WaterOnResidentAuthError("Token rejected (HTTP 401)")
-        try:
-            resp.raise_for_status()
-            return await resp.json(content_type=None)
-        except (aiohttp.ClientError, ValueError, asyncio.TimeoutError) as err:
-            raise WaterOnResidentConnectionError(f"Bad response from {url}: {err}") from err
+        last_err: Exception | None = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = await self._session.get(
+                    url, headers=self._auth_headers(bearer), timeout=TIMEOUT
+                )
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                last_err = err
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_BACKOFF * (2 ** attempt))
+                    continue
+                raise WaterOnResidentConnectionError(f"Cannot reach {url}: {err}") from err
+            if resp.status == 401:
+                raise WaterOnResidentAuthError("Token rejected (HTTP 401)")
+            try:
+                resp.raise_for_status()
+                return await resp.json(content_type=None)
+            except (aiohttp.ClientError, ValueError, asyncio.TimeoutError) as err:
+                raise WaterOnResidentConnectionError(f"Bad response from {url}: {err}") from err
+        raise WaterOnResidentConnectionError(f"Cannot reach {url}: {last_err}")
 
     async def _async_post_form(
         self, url: str, params: dict[str, Any]
@@ -228,16 +238,23 @@ class WaterOnResidentAPI:
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded",
         }
-        try:
-            resp = await self._session.post(
-                url, data=params, headers=headers, timeout=TIMEOUT
-            )
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            raise WaterOnResidentConnectionError(f"Cannot reach {url}: {err}") from err
-        if resp.status == 401:
-            raise WaterOnResidentAuthError("Token rejected (HTTP 401)")
-        try:
-            resp.raise_for_status()
-            return await resp.json(content_type=None)
-        except (aiohttp.ClientError, ValueError, asyncio.TimeoutError) as err:
-            raise WaterOnResidentConnectionError(f"Bad response from {url}: {err}") from err
+        last_err: Exception | None = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                resp = await self._session.post(
+                    url, data=params, headers=headers, timeout=TIMEOUT
+                )
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                last_err = err
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(RETRY_BACKOFF * (2 ** attempt))
+                    continue
+                raise WaterOnResidentConnectionError(f"Cannot reach {url}: {err}") from err
+            if resp.status == 401:
+                raise WaterOnResidentAuthError("Token rejected (HTTP 401)")
+            try:
+                resp.raise_for_status()
+                return await resp.json(content_type=None)
+            except (aiohttp.ClientError, ValueError, asyncio.TimeoutError) as err:
+                raise WaterOnResidentConnectionError(f"Bad response from {url}: {err}") from err
+        raise WaterOnResidentConnectionError(f"Cannot reach {url}: {last_err}")
