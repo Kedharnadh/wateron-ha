@@ -1,7 +1,7 @@
 {
   "domain": "wateron",
   "name": "WaterOn (SmarterHomes)",
-  "codeowners": [],
+  "codeowners": ["@Kedharnadh"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/Kedharnadh/wateron-ha",

@@ -29,18 +29,50 @@ and the official **WaterOn Android app** (individual flat portal)
 - Everything surfaced per-apartment via the device registry (device per flat).
 - Home Assistant MQTT auto-discovery is **not** required — sensors register natively.
 
-## Installation (HACS)
+## Installation
 
-1. Install [HACS](https://hacs.xyz/) if you haven't already.
-2. Push this folder to a GitHub repository (e.g. `wateron-ha`).
-3. HACS → *Integrations* → ⋮ menu → *Custom repositories*.
-4. Add `https://github.com/kedharnadh/wateron-ha` with category **Integration**.
-5. Click through the added repository → **Download** → restart Home Assistant.
-6. Settings → **Devices & Services** → **Add integration** → search **WaterOn**.
-7. Choose your account type:
-   - **Committee** — the username/password you use to log in at `fm.wateron.cc`.
-   - **Resident** — your country code (ISD) and mobile number. An OTP is sent to it;
-     enter the OTP to finish setup.
+This is a custom repository: it is not in the default catalog yet, so you add it by its
+GitHub link. On Home Assistant **2026.11 or newer** it installs and updates through the
+built-in **Marketplace**. On **2026.10 or older** it uses **HACS**.
+
+[![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Kedharnadh&repository=wateron-ha&category=integration)
+
+> The link above opens the repository in the Marketplace (2026.11+) or in HACS
+> (older versions), and offers to add it as a custom repository if it is not known yet.
+
+### Home Assistant 2026.11 or newer (Marketplace)
+
+1. Go to **Settings** → **Marketplace** and accept the warning the first time.
+2. If the Marketplace asks you to connect GitHub, follow the device sign-in prompt.
+   You can also connect ahead of time via **Settings** → **Devices & services** →
+   **Marketplace** → ⋮ → **Reconfigure**.
+3. In the upper-right corner, select **Add from link**.
+4. Enter `https://github.com/Kedharnadh/wateron-ha` (or `Kedharnadh/wateron-ha`).
+   If the type cannot be detected, select **Integration** under **Type**.
+5. Select the repository and choose **Install**.
+6. Restart Home Assistant if the install dialog asks for it.
+7. Go to **Settings** → **Devices & services** → **Add integration** and search for
+   **WaterOn**.
+
+### Home Assistant 2026.10 or older (HACS)
+
+1. Install [HACS](https://hacs.xyz/docs/use/) if you haven't already.
+2. HACS → *Integrations* → ⋮ menu → *Custom repositories*.
+3. Add `https://github.com/Kedharnadh/wateron-ha` with category **Integration**.
+4. Open the added repository → **Download** → restart Home Assistant.
+5. Go to **Settings** → **Devices & services** → **Add integration** and search for
+   **WaterOn**.
+
+### First setup
+
+Choose your account type when adding the integration:
+
+- **Committee** — the username/password you use to log in at `fm.wateron.cc`.
+- **Resident** — your country code (ISD) and mobile number. An OTP is sent to it; enter
+  the OTP to finish setup.
+
+Upgrades are handled for you: HACS and the Marketplace both create an update entity, so
+new releases show up under **Settings** → **Updates**.
 
 ## Development / CI
 
