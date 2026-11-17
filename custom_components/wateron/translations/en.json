@@ -67,6 +67,7 @@
       "total_unpaid": { "name": "Apartments unpaid" },
       "last_update": { "name": "Last update" },
       "apartment_consumption": { "name": "Water consumption" },
+      "consumption_today": { "name": "Today's consumption" },
       "bill_amount": { "name": "Bill amount" },
       "bill_date": { "name": "Bill date" },
       "bill_paid": { "name": "Bill paid" },

@@ -14,6 +14,8 @@ and the official **WaterOn Android app** (individual flat portal)
 - **Society-wide sensors** (committee) — total consumption, highest/lowest day,
   billing amounts, paid/unpaid apartment counts, last update.
 - **Per-apartment water consumption** sensors (litres) for every metered flat.
+- **Today's consumption** sensor (resident) — current-day usage per flat in litres,
+  derived from the daily readings and resetting at midnight (Home Assistant local date).
 - **Historical consumption import** — on the first refresh the resident coordinator
   pulls up to 3 months of daily readings (current + previous 2 months) in a single call.
   Per-flat monthly totals are exposed as **"Consumption last month"** and
@@ -101,6 +103,9 @@ Change the poll interval later via the integration's **Options**.
   you go back to the mobile-number step.
 - **Resident tokens expire** — the integration refreshes the auth token automatically
   using the same `/v2.0/auth/` endpoint the app uses, and persists it to the config entry.
+- **"Today's consumption" looks off by a day** — the sensor groups readings by the
+  Home Assistant local date. Make sure your Home Assistant timezone matches the one
+  used by your WaterOn account.
 - **No valves/apartments appear** — the portal ships several variants of these endpoints
   (wired vs wireless, `valve` vs `valvestate`). If entities are missing, check the Home
   Assistant logs and share one captured API response in an issue so the parsing can be

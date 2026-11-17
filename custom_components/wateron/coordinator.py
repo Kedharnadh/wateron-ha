@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import WaterOnAPI, WaterOnAuthError, WaterOnConnectionError
 from .api_resident import (
@@ -313,6 +314,27 @@ def parse_resident_profile(raw: Any) -> list[dict[str, Any]]:
     return apartments
 
 
+def _normalise_day(value: Any) -> str | None:
+    """Return an ISO (YYYY-MM-DD) key for an API date value."""
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10]).isoformat()
+    except ValueError:
+        pass
+    for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(text[:10], fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
 def parse_resident_daily_records(raw: Any) -> list[dict[str, Any]]:
     """Return the daily consumption rows from /getreading/daily."""
     records: list[dict[str, Any]] = []
@@ -334,7 +356,7 @@ def parse_resident_daily_records(raw: Any) -> list[dict[str, Any]]:
             value = float(row.get("value") or 0)
         except (TypeError, ValueError):
             value = 0.0
-        day = str(row.get("flow_date") or row.get("date") or "")
+        day = _normalise_day(row.get("flow_date") or row.get("date"))
         if not day:
             continue
         records.append({"meterId": meter_id, "date": day, "value": value})
@@ -504,7 +526,9 @@ class WaterOnResidentDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]
         self.hass.config_entries.async_update_entry(self.entry, data=data)
 
     async def _async_fetch(self) -> dict[str, Any]:
-        now = datetime.now(tz=timezone.utc)
+        # Use Home Assistant's local date so the daily query and "today" match
+        # the user's day (UTC can still be yesterday around midnight in IST).
+        now = dt_util.now()
         month = str(now.month)
         year = str(now.year)
         current_month_key = f"{now.year:04d}-{now.month:02d}"

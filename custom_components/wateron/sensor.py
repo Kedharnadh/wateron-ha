@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from typing import Any, Callable
 
 from homeassistant.components.sensor import (
@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import ACCOUNT_RESIDENT, DOMAIN
 from .coordinator import WaterOnDataUpdateCoordinator
@@ -181,7 +182,7 @@ RESIDENT_BILL_SENSORS: tuple[WaterOnResidentSensorDescription, ...] = (
 
 def _month_key_for_offset(offset: int) -> str:
     """Return the 'YYYY-MM' key `offset` months before the current month."""
-    now = datetime.now(tz=timezone.utc)
+    now = dt_util.now()
     total = now.year * 12 + (now.month - 1) - offset
     year, month0 = divmod(total, 12)
     return f"{year:04d}-{month0 + 1:02d}"
@@ -223,6 +224,16 @@ RESIDENT_ALERT_HISTORY_SENSOR = SensorEntityDescription(
     entity_category=EntityCategory.DIAGNOSTIC,
 )
 
+RESIDENT_TODAY_SENSOR = SensorEntityDescription(
+    key="consumption_today",
+    name="Today's consumption",
+    translation_key="consumption_today",
+    device_class=SensorDeviceClass.WATER,
+    state_class=SensorStateClass.TOTAL_INCREASING,
+    native_unit_of_measurement=UnitOfVolume.LITERS,
+    icon="mdi:water-outline",
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -243,6 +254,9 @@ async def async_setup_entry(
     for apartment in coordinator.data.get("apartments", []):
         entities.append(WaterOnApartmentSensor(coordinator, entry, apartment))
         if coordinator.data.get("account_type") == ACCOUNT_RESIDENT:
+            entities.append(
+                WaterOnResidentTodaySensor(coordinator, entry, apartment)
+            )
             entities.extend(
                 WaterOnResidentBillSensor(coordinator, entry, apartment, description)
                 for description in RESIDENT_BILL_SENSORS
@@ -394,6 +408,69 @@ class WaterOnApartmentSensor(WaterOnEntity, SensorEntity):
         if apartment and apartment.get("daily_readings"):
             attrs["daily_readings"] = apartment["daily_readings"]
         return attrs
+
+
+class WaterOnResidentTodaySensor(WaterOnEntity, SensorEntity):
+    """Water used so far today for a resident apartment."""
+
+    def __init__(
+        self,
+        coordinator: WaterOnDataUpdateCoordinator,
+        entry: ConfigEntry,
+        apartment: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self.entity_description = RESIDENT_TODAY_SENSOR
+        self._apt_id = apartment.get("id", "unknown")
+        self._flat = apartment.get("flat", self._apt_id)
+        self._attr_unique_id = (
+            f"wateron_{coordinator.society_id}_cons_today_{self._apt_id}"
+        )
+        self._attr_name = f"{self._flat} today's consumption"
+        unit = apartment.get("unit_abbrev") or UnitOfVolume.LITERS
+        self._attr_native_unit_of_measurement = (
+            unit if unit in (UnitOfVolume.LITERS, "KL", "kl") else UnitOfVolume.LITERS
+        )
+        self._attr_device_info = {
+            "identifiers": {
+                (DOMAIN, f"{coordinator.society_id}_apt_{self._apt_id}")
+            },
+            "name": f"WaterOn {self._flat}",
+            "manufacturer": "SmarterHomes Technologies",
+            "model": "WaterOn Smart Water Meter",
+            "via_device": (DOMAIN, coordinator.society_id),
+        }
+
+    @property
+    def _today(self) -> str:
+        """Return today's date key in the Home Assistant timezone."""
+        return dt_util.now().date().isoformat()
+
+    @property
+    def _readings(self) -> list[dict[str, Any]]:
+        for apartment in self.coordinator.data.get("apartments", []):
+            if apartment.get("id") == self._apt_id:
+                return [
+                    row
+                    for row in apartment.get("daily_readings", [])
+                    if row.get("date") == self._today
+                ]
+        return []
+
+    @property
+    def native_value(self) -> float:
+        return round(
+            sum(float(row.get("value") or 0) for row in self._readings), 2
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "flat": self._flat,
+            "date": self._today,
+            "readings": len(self._readings),
+            "last_update": self.coordinator.data.get("last_update"),
+        }
 
 
 class WaterOnResidentBillSensor(WaterOnEntity, SensorEntity):
