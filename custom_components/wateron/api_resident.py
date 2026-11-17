@@ -94,7 +94,12 @@ class WaterOnResidentAPI:
         """Request a login OTP for the registered mobile number."""
         url = f"{API_BASE_MAIN}{REGISTER_PATH}"
         data = await self._async_post_form(
-            url, {"mobile": self._mobile, "isd": self._isd}
+            url,
+            {
+                "mobile": self._mobile,
+                "isd": self._isd,
+                "isdCode": self._isd,
+            },
         )
         message = data.get("message", "") if isinstance(data, dict) else ""
         if not isinstance(data, dict) or message.strip().lower() != "valid user":
@@ -106,7 +111,12 @@ class WaterOnResidentAPI:
         url = f"{API_BASE_MAIN}{VERIFY_OTP_PATH}"
         data = await self._async_post_form(
             url,
-            {"mobile": self._mobile, "isd": self._isd, "otp": otp},
+            {
+                "mobile": self._mobile,
+                "isd": self._isd,
+                "isdCode": self._isd,
+                "otp": otp,
+            },
         )
         if not isinstance(data, dict) or data.get("status_code") != 200:
             raise WaterOnResidentAuthError("Invalid OTP")
@@ -135,6 +145,7 @@ class WaterOnResidentAPI:
             {
                 "mobile": self._mobile,
                 "isd": self._isd,
+                "isdCode": self._isd,
                 "token": self._token or "",
             },
         )
@@ -158,6 +169,7 @@ class WaterOnResidentAPI:
                 "fdate": fdate,
                 "mobile": self._mobile,
                 "isd": self._isd,
+                "isdCode": self._isd,
                 "fcmToken": _FCM_TOKEN_PLACEHOLDER,
             },
         )
@@ -200,6 +212,7 @@ class WaterOnResidentAPI:
                 "token": self._token or "",
                 "mobile": self._mobile,
                 "isd": self._isd,
+                "isdCode": self._isd,
                 "aptId": str(apt_id),
                 "start": "0",
                 "limit": str(limit),
