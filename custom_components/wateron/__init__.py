@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import WaterOnAPI, WaterOnAuthError, WaterOnConnectionError
@@ -49,12 +50,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             try:
                 await api.async_refresh_token()
                 await api.async_profile()
-            except (WaterOnResidentAuthError, WaterOnResidentConnectionError):
+            except WaterOnResidentConnectionError as err:
+                raise ConfigEntryNotReady(
+                    f"Could not reach the WaterOn API for entry "
+                    f"{entry.entry_id}: {err}"
+                ) from err
+            except WaterOnResidentAuthError:
                 LOGGER.error("Authentication failed for entry %s", entry.entry_id)
                 return False
-        except WaterOnResidentConnectionError:
-            LOGGER.error("Could not reach the WaterOn API for entry %s", entry.entry_id)
-            return False
+        except WaterOnResidentConnectionError as err:
+            raise ConfigEntryNotReady(
+                f"Could not reach the WaterOn API for entry "
+                f"{entry.entry_id}: {err}"
+            ) from err
 
         coordinator = WaterOnResidentDataUpdateCoordinator(
             hass, api, entry, poll_interval
@@ -70,9 +78,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except WaterOnAuthError:
             LOGGER.error("Authentication failed for entry %s", entry.entry_id)
             return False
-        except WaterOnConnectionError:
-            LOGGER.error("Could not reach the WaterOn API for entry %s", entry.entry_id)
-            return False
+        except WaterOnConnectionError as err:
+            raise ConfigEntryNotReady(
+                f"Could not reach the WaterOn API for entry "
+                f"{entry.entry_id}: {err}"
+            ) from err
 
         coordinator = WaterOnDataUpdateCoordinator(hass, api, poll_interval)
 
